@@ -1,0 +1,199 @@
+import matplotlib
+import numpy as np
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+def addBead(pos, L):
+    # Calculate the possible positions for the new bead of the polymer.
+    # Then randomly choose one of the positions with a certain probability according to their weight.
+
+    # Ntheta random angles for the possible position of the new bead
+    angle = 2 * np.pi * np.random.rand() + np.linspace(0, 2 * np.pi, Ntheta)
+
+    # distance between beads for the x and y direction
+    dx = pos[L - 2, 0] - pos[L - 1, 0]
+    dy = pos[L - 2, 1] - pos[L - 1, 1]
+
+    # possible positions of the new bead
+    xNewBead = dx * np.cos(angle) - dy * np.sin(angle)
+    yNewBead = dy * np.cos(angle) + dx * np.sin(angle)
+
+    possibleBeadPos = np.column_stack((xNewBead + pos[L - 1, 0], yNewBead + pos[L - 1, 1]))
+
+    # Calculate Weights
+    weight, totalWeight = calculateWeights(possibleBeadPos, pos, L)
+
+    randomNumber = np.random.rand()  # Create random number to choose the new position of the bead
+    index_theta = np.digitize(randomNumber * totalWeight, np.cumsum(weight))
+
+    # When the weights are zero the angle is chosen at random
+    if index_theta == Ntheta:
+        index_theta = np.random.randint(5)
+
+    posNewBead = possibleBeadPos[index_theta]
+    weightchoosen = weight[index_theta]
+
+    return posNewBead, totalWeight
+
+
+def calculateWeights(possibleBeadPos, pos, L):
+    # Calculate the weights of the possibleBeadPos
+
+    # Constants in the Lennard-Jones potential
+    eps = 0.25
+    sig = 0.8
+    sig6 = sig ** 6
+    sig12 = sig ** 12
+
+    E = np.zeros(len(possibleBeadPos))
+
+    for n in range(len(possibleBeadPos)):
+        # Distance between the new bead and the existing beads
+        dx = possibleBeadPos[n, 0] - pos[0:L, 0]
+        dy = possibleBeadPos[n, 1] - pos[0:L, 1]
+
+        dr2 = 1 / (dx * dx + dy * dy)
+
+        E[n] = 4 * eps * np.sum(
+            sig12 * dr2 ** 6 - sig6 * dr2 ** 3)  # Energy of the polymer according to the Lennard-Jones potential
+
+    # Weights corresponding to the new bead positions.
+    weight = np.exp(-E / T)
+    totalWeight = np.sum(weight)
+
+    return weight, totalWeight
+
+
+def growPolymer(pos, L, polWeight, PERM, n):
+    # Grow a polymer up to a length of Nbeads using a recursive structure.
+
+    pos[L], totalWeight = addBead(pos, L)  # Add a bead to the end of the polymer
+
+    # The weight of the polymer is calculated and stored in an array.
+    polWeight *= totalWeight / (0.75 * Ntheta)
+    polymerWeight[count[L], L] = polWeight
+
+    # Calculate the end to end distance
+    end2EndDistance[count[L], L] = np.sum((pos[0] - pos[L]) ** 2)
+
+    count[L] += 1  # Count the number of polymers at bead length L
+
+    if (PERM == False and L < Nbeads - 1):  # Rosenbluth method
+        if totalWeight == 0:  # If the weight is zero, restart growing this polymer
+            count[2:L + 1] -= 1
+            n[0] -= 1
+
+        else:
+            growPolymer(pos, L + 1, polWeight, PERM, n)
+
+    if (PERM and L < Nbeads - 1):  # PERM method
+        if (L < 4 or count[L + 1] > Npolymers_max - (Npolymers - ii + 2)):
+            growPolymer(pos, L + 1, polWeight, PERM, n)
+
+        else:
+            averageW = np.sum(polymerWeight[:count[L], L])
+            weight3 = np.sum(polymerWeight[:count[2], 2])
+
+            # Determine the upper and lower limit for pruning and enriching
+            upLim = 2 * averageW / weight3
+            lowLim = 1.2 * averageW / weight3
+
+            if polWeight > upLim:  # Enrich strong polymers
+                newWeight = 0.5 * polWeight
+                growPolymer(pos, L + 1, newWeight, PERM, n)
+                growPolymer(pos, L + 1, newWeight, PERM, n)
+
+            elif polWeight < lowLim:  # Prune weak polymers with 50% chance
+                randomNumber = np.random.rand()
+                if randomNumber < 0.5:
+                    newWeight = 2 * polWeight
+                    growPolymer(pos, L + 1, newWeight, PERM, n)
+
+            else:  # Continue growing the polymer without pruning or enriching
+                growPolymer(pos, L + 1, polWeight, PERM, n)
+
+def hydrogenBond(pos1, pos2, Nbeads):
+    # Create bond between two points near each other
+    # initialize j
+    j = 1
+    while j < Nbeads:
+        # reset i
+        i = 1
+        while i < Nbeads:
+            # distance between points across polymers
+            dx = pos2[j][0] - pos1[i][0]
+            dy = pos2[j][1] - pos1[i][1]
+            distItoJ = np.sqrt(dx**2 + dy**2)
+            if i in list:
+                i += 1
+                continue
+            elif distItoJ <= 1:
+                plt.arrow(pos1[i][0], pos1[i][1], dx, dy)
+                list.append(i)
+                break
+            i += 1
+        j += 1
+
+Npolymers = 1000  # Number of polymers, i.e., polymer population
+Nbeads = 50  # Number of beads, i.e., polymer length
+Ntheta = 6  # Number of angles of the possible new bead positions
+T = 0.5  # Temperature of the system
+
+PERM = True  # If PERM = True: use the PERM method. If PERM = False: use the Rosenbluth method
+
+Npolymers_max = Npolymers * 5
+
+# Create empty arrays
+pos1 = np.zeros((Nbeads, 2))
+pos2 = np.zeros((Nbeads, 2))
+polymerWeight = np.zeros((Npolymers_max, Nbeads))
+count = np.zeros(Nbeads, dtype=int)
+end2EndDistance = np.zeros((Npolymers_max, Nbeads))
+n1 = np.zeros(1)
+n2 = np.zeros(1)
+list = []
+
+# Initial position vector for the first two beads; first chain
+pos1[0] = [0, 0]
+pos1[1] = [1, 0]
+
+# Initial position vector for the first two beads; second chain
+pos2[0] = [0, 0]
+pos2[1] = [0, 1]
+
+# Grow the first polymer, this is always done with the Rosenbluth method
+while n1[0] < 1:
+    n1[0] += 1
+    growPolymer(pos1, 2, 1, False, n1)
+
+# Grow the second polymer, this is always done with the Rosenbluth method
+while n2[0] < 1:
+    n2[0] += 1
+    growPolymer(pos2, 2, 1, False, n2)
+
+plt.figure()
+hydrogenBond(pos1, pos2, Nbeads)
+plt.plot(pos1[:, 0], pos1[:, 1], 'o-', ms=3, c='c')
+# This plots the second polymer
+plt.plot(pos2[:, 0], pos2[:, 1], 'o-', ms=3, c='b')
+plt.title('First polymer')
+plt.xlabel('x')
+plt.ylabel('y')
+plt.tick_params(axis='both', pad=5)
+plt.axis('equal')
+
+if PERM:
+    for ii in range(1, Npolymers - 1):
+        growPolymer(pos1, 2, 1, PERM, n1)
+else:
+    while n1[0] < Npolymers - 1:
+        n1[0] += 1
+        growPolymer(pos1, 2, 1, PERM, n1)
+        
+if PERM:
+    for ii in range(1, Npolymers - 1):
+        growPolymer(pos2, 2, 1, PERM, n2)
+else:
+    while n2[0] < Npolymers - 1:
+        n2[0] += 1
+        growPolymer(pos2, 2, 1, PERM, n2)
